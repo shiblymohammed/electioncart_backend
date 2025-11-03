@@ -6,15 +6,23 @@ from firebase_admin import auth, credentials
 import jwt
 from datetime import datetime, timedelta
 from .models import CustomUser
+import os
 
 
-# Initialize Firebase Admin SDK
-if settings.FIREBASE_CREDENTIALS_PATH:
+# Initialize Firebase Admin SDK (optional)
+FIREBASE_ENABLED = False
+if settings.FIREBASE_CREDENTIALS_PATH and os.path.exists(settings.FIREBASE_CREDENTIALS_PATH):
     try:
-        cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
-        firebase_admin.initialize_app(cred)
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
+            firebase_admin.initialize_app(cred)
+        FIREBASE_ENABLED = True
+        print("✅ Firebase authentication enabled")
     except Exception as e:
-        print(f"Firebase initialization error: {e}")
+        print(f"⚠️  Firebase initialization error: {e}")
+        print("ℹ️  Firebase authentication disabled")
+else:
+    print("ℹ️  Firebase credentials not provided - Firebase authentication disabled")
 
 
 def generate_jwt_token(user):
@@ -48,9 +56,13 @@ def decode_jwt_token(token):
 class FirebaseAuthentication(authentication.BaseAuthentication):
     """
     Custom authentication class for Firebase token verification.
+    Only works if Firebase is enabled.
     """
     
     def authenticate(self, request):
+        if not FIREBASE_ENABLED:
+            return None
+        
         auth_header = request.META.get('HTTP_AUTHORIZATION', '')
         
         if not auth_header.startswith('Bearer '):
