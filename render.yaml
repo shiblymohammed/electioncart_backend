@@ -5,7 +5,7 @@ services:
     runtime: python
     plan: free
     buildCommand: "./build.sh"
-    startCommand: "gunicorn election_cart.wsgi:application --bind 0.0.0.0:$PORT"
+    startCommand: "gunicorn election_cart.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --threads 2 --worker-class gthread --max-requests 1000 --max-requests-jitter 50 --timeout 30"
     healthCheckPath: /health/
     envVars:
       - key: PYTHON_VERSION
@@ -33,7 +33,7 @@ services:
       - key: SENTRY_DSN
         sync: false
       - key: CORS_ALLOWED_ORIGINS
-        value: http://localhost:3000
+        value: https://admin.lapoelectioncart.com,https://lapoelectioncart.com,http://localhost:3000,http://localhost:5173,http://localhost:5174
 
 databases:
   - name: electioncart-db
