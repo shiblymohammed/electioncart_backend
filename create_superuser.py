@@ -23,7 +23,14 @@ def create_superuser():
     """Create superuser if it doesn't exist."""
     try:
         if User.objects.filter(username=USERNAME).exists():
-            print(f'✓ Superuser "{USERNAME}" already exists. Skipping creation.')
+            user = User.objects.get(username=USERNAME)
+            # Update role if it's not set to admin
+            if user.role != 'admin':
+                user.role = 'admin'
+                user.save()
+                print(f'✓ Updated "{USERNAME}" role to admin')
+            else:
+                print(f'✓ Superuser "{USERNAME}" already exists with admin role.')
             return
         
         user = User.objects.create_superuser(
@@ -31,9 +38,14 @@ def create_superuser():
             email=EMAIL,
             password=PASSWORD
         )
+        # Set the role to 'admin' for the admin panel
+        user.role = 'admin'
+        user.save()
+        
         print(f'✓ Superuser "{USERNAME}" created successfully!')
         print(f'  Username: {USERNAME}')
         print(f'  Email: {EMAIL}')
+        print(f'  Role: admin')
         
     except Exception as e:
         print(f'✗ Error creating superuser: {e}')
