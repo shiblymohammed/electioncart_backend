@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import Order, OrderItem, OrderResource, OrderChecklist, ChecklistItem, DynamicResourceSubmission
+from .models import (
+    Order, OrderItem, OrderResource, OrderChecklist, ChecklistItem, 
+    DynamicResourceSubmission, PaymentRecord, OrderStatusHistory
+)
 
 
 class OrderItemInline(admin.TabularInline):
@@ -15,10 +18,11 @@ class ChecklistItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ['order_number', 'user', 'total_amount', 'status', 'assigned_to', 'created_at']
-    list_filter = ['status', 'created_at', 'assigned_to']
-    search_fields = ['order_number', 'user__phone_number', 'user__username']
+    list_display = ['order_number', 'user', 'total_amount', 'status', 'is_manual_order', 'order_source', 'priority', 'assigned_to', 'created_at']
+    list_filter = ['status', 'is_manual_order', 'order_source', 'priority', 'created_at', 'assigned_to']
+    search_fields = ['order_number', 'user__phone', 'user__name']
     inlines = [OrderItemInline]
+    readonly_fields = ['created_by', 'created_at', 'updated_at']
 
 
 @admin.register(OrderResource)
@@ -51,3 +55,19 @@ class DynamicResourceSubmissionAdmin(admin.ModelAdmin):
             return obj.file_value.name if obj.file_value else None
         return None
     get_value.short_description = 'Value'
+
+
+@admin.register(PaymentRecord)
+class PaymentRecordAdmin(admin.ModelAdmin):
+    list_display = ['order', 'amount', 'payment_method', 'payment_reference', 'recorded_by', 'recorded_at']
+    list_filter = ['payment_method', 'recorded_at']
+    search_fields = ['order__order_number', 'payment_reference']
+    readonly_fields = ['recorded_by', 'recorded_at']
+
+
+@admin.register(OrderStatusHistory)
+class OrderStatusHistoryAdmin(admin.ModelAdmin):
+    list_display = ['order', 'old_status', 'new_status', 'changed_by', 'is_manual_change', 'changed_at']
+    list_filter = ['is_manual_change', 'new_status', 'changed_at']
+    search_fields = ['order__order_number', 'reason']
+    readonly_fields = ['changed_at']
