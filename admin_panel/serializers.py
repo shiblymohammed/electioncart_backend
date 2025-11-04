@@ -1,6 +1,9 @@
 from rest_framework import serializers
 from authentication.models import CustomUser
-from orders.models import Order, OrderItem, OrderResource, OrderChecklist, ChecklistItem, DynamicResourceSubmission
+from orders.models import (
+    Order, OrderItem, OrderResource, OrderChecklist, ChecklistItem, 
+    DynamicResourceSubmission, PaymentRecord, OrderStatusHistory
+)
 from products.models import ResourceFieldDefinition
 from products.serializers import PackageSerializer, CampaignSerializer
 from .models import Notification
@@ -134,37 +137,57 @@ class AdminOrderListSerializer(serializers.ModelSerializer):
     user = UserBasicSerializer(read_only=True)
     assigned_to = UserBasicSerializer(read_only=True)
     total_items = serializers.SerializerMethodField()
+    total_paid = serializers.SerializerMethodField()
+    payment_balance = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
         fields = [
-            'id', 'order_number', 'user', 'total_amount', 'status',
+            'id', 'order_number', 'user', 'total_amount', 'status', 'payment_status',
             'assigned_to', 'total_items', 'payment_completed_at',
+            'total_paid', 'payment_balance',
             'created_at', 'updated_at'
         ]
     
     def get_total_items(self, obj):
         """Return total number of items"""
         return obj.get_total_items()
+    
+    def get_total_paid(self, obj):
+        """Return total amount paid"""
+        return float(obj.get_total_paid())
+    
+    def get_payment_balance(self, obj):
+        """Return remaining payment balance"""
+        return float(obj.get_payment_balance())
 
 
 class AdminOrderDetailSerializer(serializers.ModelSerializer):
     """Detailed order serializer for admin panel"""
     user = UserBasicSerializer(read_only=True)
     assigned_to = UserBasicSerializer(read_only=True)
+    created_by = UserBasicSerializer(read_only=True)
     items = OrderItemDetailSerializer(many=True, read_only=True)
     total_items = serializers.SerializerMethodField()
     resource_upload_progress = serializers.SerializerMethodField()
     resources = serializers.SerializerMethodField()
     checklist = serializers.SerializerMethodField()
+    payment_records = serializers.SerializerMethodField()
+    status_history = serializers.SerializerMethodField()
+    total_paid = serializers.SerializerMethodField()
+    balance_due = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
         fields = [
-            'id', 'order_number', 'user', 'total_amount', 'status',
+            'id', 'order_number', 'user', 'total_amount', 'status', 'payment_status',
             'razorpay_order_id', 'razorpay_payment_id', 'payment_completed_at',
             'assigned_to', 'items', 'total_items', 'resource_upload_progress',
-            'resources', 'checklist', 'created_at', 'updated_at'
+            'resources', 'checklist', 'created_at', 'updated_at',
+            # Manual order fields
+            'is_manual_order', 'order_source', 'created_by', 'payment_reference',
+            'priority', 'admin_notes', 'payment_records', 'status_history',
+            'total_paid', 'balance_due'
         ]
     
     def get_total_items(self, obj):
@@ -270,6 +293,24 @@ class AdminOrderDetailSerializer(serializers.ModelSerializer):
             }
         except OrderChecklist.DoesNotExist:
             return None
+    
+    def get_payment_records(self, obj):
+        """Return all payment records for this order"""
+        records = PaymentRecord.objects.filter(order=obj).order_by('-recorded_at')
+        return PaymentRecordSerializer(records, many=True).data
+    
+    def get_status_history(self, obj):
+        """Return status change history"""
+        history = OrderStatusHistory.objects.filter(order=obj).order_by('-changed_at')[:10]
+        return OrderStatusHistorySerializer(history, many=True).data
+    
+    def get_total_paid(self, obj):
+        """Calculate total amount paid"""
+        return float(obj.get_total_paid())
+    
+    def get_balance_due(self, obj):
+        """Calculate balance due"""
+        return float(obj.get_payment_balance())
 
 
 class OrderAssignmentSerializer(serializers.Serializer):
@@ -423,3 +464,131 @@ class ResourceFieldReorderSerializer(serializers.Serializer):
             if 'id' not in item or 'order' not in item:
                 raise serializers.ValidationError('Each item must have id and order fields')
         return value
+
+
+
+# ============================================================================
+# MANUAL ORDER CREATION SERIALIZERS
+# ============================================================================
+
+class ManualOrderCustomerSerializer(serializers.Serializer):
+    """Customer data for manual order creation"""
+    name = serializers.CharField(max_length=100)
+    phone = serializers.CharField(max_length=15)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    address = serializers.CharField(required=False, allow_blank=True)
+    city = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    state = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    pincode = serializers.CharField(max_length=10, required=False, allow_blank=True)
+
+
+class ManualOrderItemSerializer(serializers.Serializer):
+    """Order item for manual order"""
+    product_type = serializers.ChoiceField(choices=['campaign', 'package'])
+    product_id = serializers.IntegerField()
+    quantity = serializers.IntegerField(min_value=1)
+
+
+class CreateManualOrderSerializer(serializers.Serializer):
+    """Serializer for creating manual orders"""
+    customer = ManualOrderCustomerSerializer()
+    items = serializers.ListField(
+        child=ManualOrderItemSerializer(),
+        min_length=1
+    )
+    order_source = serializers.ChoiceField(
+        choices=['phone_call', 'whatsapp', 'walk_in', 'email', 'referral', 'other']
+    )
+    payment_status = serializers.ChoiceField(
+        choices=['pending', 'partial', 'paid', 'cod'],
+        default='pending'
+    )
+    payment_method = serializers.ChoiceField(
+        choices=['cash', 'upi', 'bank_transfer', 'card', 'cheque', 'other'],
+        required=False,
+        allow_blank=True
+    )
+    payment_reference = serializers.CharField(required=False, allow_blank=True)
+    payment_amount = serializers.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        required=False
+    )
+    assigned_to = serializers.IntegerField(required=False, allow_null=True)
+    priority = serializers.ChoiceField(
+        choices=['low', 'normal', 'high', 'urgent'],
+        default='normal'
+    )
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+# ============================================================================
+# PAYMENT RECORD SERIALIZERS
+# ============================================================================
+
+class PaymentRecordSerializer(serializers.ModelSerializer):
+    """Serializer for payment records"""
+    recorded_by = UserBasicSerializer(read_only=True)
+    
+    class Meta:
+        model = PaymentRecord
+        fields = ['id', 'order', 'amount', 'payment_method', 'payment_reference', 
+                  'payment_proof', 'recorded_by', 'recorded_at', 'notes']
+        read_only_fields = ['id', 'recorded_by', 'recorded_at']
+
+
+class RecordPaymentSerializer(serializers.Serializer):
+    """Serializer for recording a payment"""
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0.01)
+    payment_method = serializers.ChoiceField(
+        choices=['cash', 'upi', 'bank_transfer', 'card', 'cheque', 'razorpay', 'other']
+    )
+    payment_reference = serializers.CharField(required=False, allow_blank=True)
+    payment_proof = serializers.FileField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+# ============================================================================
+# ORDER STATUS MANAGEMENT SERIALIZERS
+# ============================================================================
+
+class OrderStatusUpdateSerializer(serializers.Serializer):
+    """Serializer for updating order status"""
+    status = serializers.ChoiceField(choices=[
+        'pending_payment',
+        'pending_resources',
+        'ready_for_processing',
+        'assigned',
+        'in_progress',
+        'completed',
+        'cancelled',
+        'on_hold'
+    ])
+    reason = serializers.CharField(required=False, allow_blank=True)
+
+
+class OrderStatusHistorySerializer(serializers.ModelSerializer):
+    """Serializer for status history"""
+    changed_by = UserBasicSerializer(read_only=True)
+    old_status_display = serializers.CharField(source='get_old_status_display', read_only=True)
+    new_status_display = serializers.CharField(source='get_new_status_display', read_only=True)
+    
+    class Meta:
+        model = OrderStatusHistory
+        fields = ['id', 'order', 'old_status', 'new_status', 'old_status_display', 
+                  'new_status_display', 'changed_by', 'changed_at', 'reason', 'is_manual_change']
+        read_only_fields = ['id', 'changed_at']
+
+
+# ============================================================================
+# PRODUCT SELECTION SERIALIZERS
+# ============================================================================
+
+class ProductForOrderSerializer(serializers.Serializer):
+    """Simplified product serializer for order creation"""
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    description = serializers.CharField()
+    price = serializers.DecimalField(max_digits=10, decimal_places=2)
+    type = serializers.CharField()  # 'campaign' or 'package'
+    is_active = serializers.BooleanField()

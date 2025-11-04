@@ -23,6 +23,33 @@ class Order(models.Model):
         ('assigned', 'Assigned to Staff'),
         ('in_progress', 'In Progress'),
         ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+        ('on_hold', 'On Hold'),
+    ]
+    
+    ORDER_SOURCE_CHOICES = [
+        ('website', 'Website'),
+        ('phone_call', 'Phone Call'),
+        ('whatsapp', 'WhatsApp'),
+        ('walk_in', 'Walk-in'),
+        ('email', 'Email'),
+        ('referral', 'Referral'),
+        ('other', 'Other'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('low', 'Low'),
+        ('normal', 'Normal'),
+        ('high', 'High'),
+        ('urgent', 'Urgent'),
+    ]
+    
+    PAYMENT_STATUS_CHOICES = [
+        ('unpaid', 'Unpaid'),
+        ('partial', 'Partially Paid'),
+        ('paid', 'Fully Paid'),
+        ('refunded', 'Refunded'),
+        ('cod', 'Cash on Delivery'),
     ]
     
     user = models.ForeignKey(CustomUser, related_name='orders', on_delete=models.CASCADE)
@@ -40,8 +67,35 @@ class Order(models.Model):
         blank=True, 
         null=True
     )
+    
+    # Manual order fields
+    is_manual_order = models.BooleanField(default=False)
+    order_source = models.CharField(max_length=20, choices=ORDER_SOURCE_CHOICES, default='website')
+    created_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_orders',
+        help_text='Admin or staff who created this manual order'
+    )
+    payment_reference = models.CharField(max_length=100, blank=True, help_text='Payment reference number for manual payments')
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='normal')
+    admin_notes = models.TextField(blank=True, help_text='Internal notes for admin/staff')
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['is_manual_order']),
+            models.Index(fields=['order_source']),
+            models.Index(fields=['created_by']),
+            models.Index(fields=['priority']),
+        ]
 
     def __str__(self):
         return f"Order {self.order_number}"
@@ -66,6 +120,32 @@ class Order(models.Model):
     def get_pending_resource_items(self):
         """Get list of order items that still need resources"""
         return self.items.filter(resources_uploaded=False)
+    
+    def get_total_paid(self):
+        """Calculate total amount paid from payment records"""
+        from django.db.models import Sum
+        total = self.payment_records.aggregate(total=Sum('amount'))['total']
+        return total or 0
+    
+    def get_payment_balance(self):
+        """Calculate remaining balance"""
+        return self.total_amount - self.get_total_paid()
+    
+    def update_payment_status(self):
+        """Update payment status based on payment records"""
+        total_paid = self.get_total_paid()
+        
+        if total_paid == 0:
+            self.payment_status = 'unpaid'
+        elif total_paid >= self.total_amount:
+            self.payment_status = 'paid'
+            if not self.payment_completed_at:
+                from django.utils import timezone
+                self.payment_completed_at = timezone.now()
+        else:
+            self.payment_status = 'partial'
+        
+        self.save(update_fields=['payment_status', 'payment_completed_at'])
 
 
 class OrderItem(models.Model):
@@ -228,3 +308,54 @@ class PaymentHistory(models.Model):
         date_str = datetime.now().strftime('%Y%m%d')
         unique_id = str(uuid.uuid4().hex)[:8].upper()
         return f"INV-{date_str}-{unique_id}"
+
+
+class PaymentRecord(models.Model):
+    """Track multiple payments for an order (for manual orders with partial payments)"""
+    PAYMENT_METHOD_CHOICES = [
+        ('cash', 'Cash'),
+        ('upi', 'UPI'),
+        ('bank_transfer', 'Bank Transfer'),
+        ('card', 'Card'),
+        ('cheque', 'Cheque'),
+        ('razorpay', 'Razorpay'),
+        ('other', 'Other'),
+    ]
+    
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='payment_records')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES)
+    payment_reference = models.CharField(max_length=100, blank=True, help_text='Transaction ID, cheque number, etc.')
+    payment_proof = models.FileField(
+        upload_to='payment_proofs/',
+        blank=True,
+        null=True,
+        help_text='Upload payment receipt or proof'
+    )
+    recorded_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True)
+    recorded_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True)
+    
+    class Meta:
+        ordering = ['-recorded_at']
+    
+    def __str__(self):
+        return f"Payment of ₹{self.amount} for {self.order.order_number}"
+
+
+class OrderStatusHistory(models.Model):
+    """Track all status changes for an order"""
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='status_history')
+    old_status = models.CharField(max_length=30)
+    new_status = models.CharField(max_length=30)
+    changed_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True)
+    changed_at = models.DateTimeField(auto_now_add=True)
+    reason = models.TextField(blank=True, help_text='Reason for status change')
+    is_manual_change = models.BooleanField(default=False, help_text='True if admin manually changed status')
+    
+    class Meta:
+        ordering = ['-changed_at']
+        verbose_name_plural = 'Order status histories'
+    
+    def __str__(self):
+        return f"{self.order.order_number}: {self.old_status} → {self.new_status}"

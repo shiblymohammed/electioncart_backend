@@ -138,6 +138,7 @@ def verify_payment(request, order_id):
             order.razorpay_payment_id = serializer.validated_data['razorpay_payment_id']
             order.razorpay_signature = serializer.validated_data['razorpay_signature']
             order.payment_completed_at = timezone.now()
+            order.payment_status = 'paid'
             order.status = 'pending_resources'
             order.save()
             

@@ -25,6 +25,15 @@ from .views import (
     reorder_popular_campaigns,
     download_order_invoice,
 )
+# Import manual order views
+from .manual_order_views import (
+    create_manual_order,
+    search_customers,
+    get_products_for_order,
+    record_payment,
+    update_payment_status,
+    update_order_status,
+)
 # Import product views for admin product management
 from products import views as product_views
 
@@ -35,6 +44,14 @@ urlpatterns = [
     path('orders/<int:pk>/', AdminOrderDetailView.as_view(), name='admin-order-detail'),
     path('orders/<int:order_id>/assign/', assign_order_to_staff, name='admin-order-assign'),
     path('orders/<int:order_id>/invoice/', download_order_invoice, name='admin-download-invoice'),
+    
+    # Manual order creation endpoints
+    path('orders/manual/', create_manual_order, name='create-manual-order'),
+    path('orders/<int:order_id>/update-status/', update_order_status, name='update-order-status'),
+    path('orders/<int:order_id>/update-payment-status/', update_payment_status, name='update-payment-status'),
+    path('orders/<int:order_id>/record-payment/', record_payment, name='record-payment'),
+    path('customers/search/', search_customers, name='search-customers'),
+    path('products/for-order/', get_products_for_order, name='products-for-order'),
     
     # Staff management endpoints
     path('staff/', StaffListView.as_view(), name='admin-staff-list'),

@@ -35,13 +35,16 @@ class OrderSerializer(serializers.ModelSerializer):
     total_items = serializers.SerializerMethodField()
     resource_upload_progress = serializers.SerializerMethodField()
     pending_resource_items = serializers.SerializerMethodField()
+    total_paid = serializers.SerializerMethodField()
+    payment_balance = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
         fields = [
-            'id', 'order_number', 'total_amount', 'status',
+            'id', 'order_number', 'total_amount', 'status', 'payment_status',
             'razorpay_order_id', 'razorpay_payment_id', 'payment_completed_at',
             'items', 'total_items', 'resource_upload_progress', 'pending_resource_items',
+            'total_paid', 'payment_balance',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['order_number', 'razorpay_order_id', 'razorpay_payment_id']
@@ -65,6 +68,14 @@ class OrderSerializer(serializers.ModelSerializer):
                 'quantity': item.quantity
             })
         return pending_items
+    
+    def get_total_paid(self, obj):
+        """Return total amount paid"""
+        return float(obj.get_total_paid())
+    
+    def get_payment_balance(self, obj):
+        """Return remaining payment balance"""
+        return float(obj.get_payment_balance())
 
 
 class PaymentVerificationSerializer(serializers.Serializer):
