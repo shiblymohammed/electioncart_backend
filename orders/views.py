@@ -209,7 +209,14 @@ def get_my_orders(request):
     Get all orders for current user.
     Endpoint: GET /api/orders/my-orders/
     """
-    orders = Order.objects.filter(user=request.user).order_by('-created_at')
+    orders = Order.objects.filter(user=request.user).select_related(
+        'assigned_to'
+    ).prefetch_related(
+        'items',
+        'items__content_type',
+        'items__resources',
+        'items__dynamic_resources__field_definition'
+    ).order_by('-created_at')
     serializer = OrderSerializer(orders, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -335,7 +342,10 @@ def get_order_resources(request, order_id):
     Endpoint: GET /api/orders/{id}/resources/
     """
     try:
-        order = Order.objects.get(id=order_id, user=request.user)
+        order = Order.objects.prefetch_related(
+            'items',
+            'items__resources'
+        ).get(id=order_id, user=request.user)
         
         # Get all order items with their resources
         items_with_resources = []
@@ -432,7 +442,10 @@ def get_order_resource_fields(request, order_id):
     from django.contrib.contenttypes.models import ContentType
     
     try:
-        order = Order.objects.get(id=order_id, user=request.user)
+        order = Order.objects.prefetch_related(
+            'items',
+            'items__dynamic_resources__field_definition'
+        ).get(id=order_id, user=request.user)
         
         # Get all order items and their required fields
         items_with_fields = []
