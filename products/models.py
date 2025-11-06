@@ -2,10 +2,6 @@ from django.db import models
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from authentication.models import CustomUser
-from PIL import Image
-from io import BytesIO
-from django.core.files.uploadedfile import InMemoryUploadedFile
-import sys
 import os
 from .validators import validate_image_file
 
@@ -200,8 +196,11 @@ class ProductImage(models.Model):
         return f"Image for {self.content_type} #{self.object_id} (Primary: {self.is_primary})"
     
     def save(self, *args, **kwargs):
-        """Generate thumbnail on save and ensure only one primary image per product"""
+        """Ensure only one primary image per product"""
         from django.conf import settings
+        import logging
+        
+        logger = logging.getLogger(__name__)
         
         # If this is being set as primary, unset other primary images for the same product
         if self.is_primary:
@@ -211,15 +210,21 @@ class ProductImage(models.Model):
                 is_primary=True
             ).exclude(id=self.id).update(is_primary=False)
         
-        # Generate thumbnail if image exists and thumbnail doesn't
-        # Only for local storage - Cloudinary handles this automatically
-        if self.image and not self.thumbnail and not settings.USE_CLOUDINARY:
-            self.thumbnail = self.create_thumbnail()
+        # Skip thumbnail generation when using Cloudinary
+        # Cloudinary handles thumbnail transformations automatically via URL parameters
+        if self.image and settings.USE_CLOUDINARY:
+            logger.info(f"Skipping thumbnail generation for ProductImage - Cloudinary handles transformations automatically")
         
         super().save(*args, **kwargs)
     
     def create_thumbnail(self):
-        """Create thumbnail using Pillow"""
+        """Create thumbnail using Pillow (lazy import for memory optimization)"""
+        # Import PIL only when needed to reduce base memory footprint
+        from PIL import Image
+        from io import BytesIO
+        from django.core.files.uploadedfile import InMemoryUploadedFile
+        import sys
+        
         if not self.image:
             return None
         
