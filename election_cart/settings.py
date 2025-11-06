@@ -88,11 +88,13 @@ if 'DATABASE_URL' in os.environ:
     DATABASES = {
         'default': dj_database_url.config(
             default=os.environ['DATABASE_URL'],
-            conn_max_age=600,  # Connection pooling: 10 minutes
+            conn_max_age=300,  # Connection pooling: 5 minutes (optimized for memory)
             conn_health_checks=True,  # Enable connection health checks (Django 4.1+)
             ssl_require=not DEBUG,  # Require SSL in production
         )
     }
+    # Note: MAX_CONNS is not a valid PostgreSQL connection option
+    # Connection pooling is handled by conn_max_age parameter above
 else:
     # Manual configuration using individual environment variables
     # Determine SSL mode based on environment
@@ -110,10 +112,11 @@ else:
             'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
             'HOST': db_host,
             'PORT': os.getenv('DB_PORT', '5432'),
-            'CONN_MAX_AGE': 600,  # Connection pooling: 10 minutes
+            'CONN_MAX_AGE': 300,  # Connection pooling: 5 minutes (optimized for memory)
             'OPTIONS': {
                 'sslmode': ssl_mode,
                 'connect_timeout': 10,
+                'MAX_CONNS': 5,  # Limit connections per worker for memory optimization
             }
         }
     }
@@ -266,7 +269,8 @@ CACHES = {
         'LOCATION': 'election-cart-cache',
         'TIMEOUT': 300,  # 5 minutes default timeout
         'OPTIONS': {
-            'MAX_ENTRIES': 1000
+            'MAX_ENTRIES': 300,  # Reduced from 1000 to limit memory usage
+            'CULL_FREQUENCY': 3,  # Remove 1/3 of entries when MAX_ENTRIES is reached
         }
     }
 }
@@ -313,22 +317,18 @@ CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
 # LOGGING CONFIGURATION
 # ============================================================================
 
-# Create logs directory if it doesn't exist
-LOGS_DIR = BASE_DIR / 'logs'
-LOGS_DIR.mkdir(exist_ok=True)
+# Optimized logging configuration for production
+# All logs stream to stdout for Render to capture
+# No file handlers to reduce memory overhead
 
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'verbose': {
+        'simple': {
             'format': '[{levelname}] {asctime} {module} - {message}',
             'style': '{',
             'datefmt': '%Y-%m-%d %H:%M:%S',
-        },
-        'simple': {
-            'format': '[{levelname}] {message}',
-            'style': '{',
         },
     },
     'handlers': {
@@ -337,67 +337,51 @@ LOGGING = {
             'formatter': 'simple',
             'level': 'INFO',
         },
-        'file': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': LOGS_DIR / 'django.log',
-            'maxBytes': 5 * 1024 * 1024,  # 5MB
-            'backupCount': 3,
-            'formatter': 'verbose',
-            'level': 'INFO',
-        },
-        'error_file': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': LOGS_DIR / 'error.log',
-            'maxBytes': 5 * 1024 * 1024,  # 5MB
-            'backupCount': 5,
-            'formatter': 'verbose',
-            'level': 'ERROR',
-        },
     },
     'loggers': {
         'django': {
-            'handlers': ['console', 'file', 'error_file'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
         'django.request': {
-            'handlers': ['console', 'file', 'error_file'],
+            'handlers': ['console'],
             'level': 'ERROR',
             'propagate': False,
         },
         'django.server': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
         'authentication': {
-            'handlers': ['console', 'file', 'error_file'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
         'orders': {
-            'handlers': ['console', 'file', 'error_file'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
         'products': {
-            'handlers': ['console', 'file', 'error_file'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
         'cart': {
-            'handlers': ['console', 'file', 'error_file'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
         'admin_panel': {
-            'handlers': ['console', 'file', 'error_file'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
     },
     'root': {
-        'handlers': ['console', 'file', 'error_file'],
+        'handlers': ['console'],
         'level': 'INFO',
     },
 }
@@ -484,8 +468,11 @@ if not DEBUG and os.getenv('SENTRY_DSN'):
         # Release tracking (optional)
         release=os.getenv('SENTRY_RELEASE', None),
         
-        # Sample rate for error events (1.0 = 100% of errors)
-        sample_rate=1.0,
+        # Sample rate for error events (0.5 = 50% of errors to reduce memory overhead)
+        sample_rate=0.5,
+        
+        # Limit breadcrumbs to reduce memory usage
+        max_breadcrumbs=20,
     )
     
     print("📊 Sentry error tracking enabled")
