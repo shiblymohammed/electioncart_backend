@@ -84,6 +84,7 @@ import dj_database_url
 
 # Priority 1: Use DATABASE_URL if provided (Railway, Heroku, etc.)
 # Priority 2: Fall back to individual environment variables
+# Priority 3: Use SQLite for local development
 if 'DATABASE_URL' in os.environ:
     DATABASES = {
         'default': dj_database_url.config(
@@ -95,7 +96,7 @@ if 'DATABASE_URL' in os.environ:
     }
     # Note: MAX_CONNS is not a valid PostgreSQL connection option
     # Connection pooling is handled by conn_max_age parameter above
-else:
+elif os.getenv('DB_NAME'):
     # Manual configuration using individual environment variables
     # Determine SSL mode based on environment
     # - Production (DEBUG=False + not localhost): require SSL
@@ -120,6 +121,15 @@ else:
             }
         }
     }
+else:
+    # SQLite for local development (no PostgreSQL required)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+    print("📦 Using SQLite for local development")
 
 # Custom User Model
 AUTH_USER_MODEL = 'authentication.CustomUser'

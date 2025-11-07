@@ -17,6 +17,9 @@ def generate_thumbnail_async(self, product_image_id):
     """
     Generate thumbnail for a product image asynchronously
     
+    Note: When Cloudinary is enabled, thumbnail generation is skipped as Cloudinary
+    handles thumbnail transformations automatically via URL parameters.
+    
     Args:
         product_image_id: ID of the ProductImage to generate thumbnail for
         
@@ -25,6 +28,15 @@ def generate_thumbnail_async(self, product_image_id):
     """
     try:
         from .models import ProductImage
+        from django.conf import settings
+        
+        # Skip thumbnail generation if Cloudinary is enabled
+        if settings.USE_CLOUDINARY:
+            logger.info(f"Skipping thumbnail generation for ProductImage {product_image_id} - Cloudinary handles transformations automatically")
+            return {
+                'status': 'skipped',
+                'message': 'Cloudinary handles thumbnail transformations automatically'
+            }
         
         # Get the product image
         product_image = ProductImage.objects.get(id=product_image_id)

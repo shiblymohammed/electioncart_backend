@@ -30,14 +30,16 @@ class AdminOrderListView(generics.ListAPIView):
     """
     serializer_class = AdminOrderListSerializer
     permission_classes = [IsAuthenticated, IsAdmin]
-    pagination_class = None  # Disable pagination
     
     def get_queryset(self):
         # Optimize with select_related and prefetch_related
         queryset = Order.objects.all().select_related(
             'user', 'assigned_to'
         ).prefetch_related(
-            'items', 'items__dynamic_resources'
+            'items__content_type',
+            'items__resources',
+            'items__dynamic_resources__field_definition',
+            'payment_records'
         ).order_by('-created_at')
         
         # Filter by status
@@ -162,7 +164,6 @@ class StaffListView(generics.ListAPIView):
     """
     serializer_class = StaffSerializer
     permission_classes = [IsAuthenticated, IsAdmin]
-    pagination_class = None  # Disable pagination
     
     def get_queryset(self):
         # Return users with staff or admin role
@@ -230,7 +231,6 @@ class StaffOrderListView(generics.ListAPIView):
     List orders assigned to the logged-in staff member
     """
     serializer_class = AdminOrderListSerializer
-    pagination_class = None  # Disable pagination
     permission_classes = [IsAuthenticated, IsAdminOrStaff]
     
     def get_queryset(self):
@@ -248,7 +248,10 @@ class StaffOrderListView(generics.ListAPIView):
         queryset = queryset.select_related(
             'user', 'assigned_to'
         ).prefetch_related(
-            'items', 'items__dynamic_resources'
+            'items__content_type',
+            'items__resources',
+            'items__dynamic_resources__field_definition',
+            'payment_records'
         ).order_by('-created_at')
         
         # Filter by status

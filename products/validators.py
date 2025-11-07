@@ -1,6 +1,5 @@
 """Validators for product-related models"""
 from django.core.exceptions import ValidationError
-from PIL import Image
 import os
 import magic
 import hashlib
@@ -8,6 +7,9 @@ import hashlib
 
 def validate_image_file(file):
     """Validate image file format and size with enhanced security checks"""
+    # Import PIL at function level to reduce initial memory footprint
+    from PIL import Image
+    
     # Check file size (max 5MB)
     max_size_mb = 5
     if file.size > max_size_mb * 1024 * 1024:
@@ -214,6 +216,10 @@ def scan_file_for_malware(file):
 
 def optimize_image(image_file, max_width=1920, max_height=1920, quality=85):
     """Optimize image size while maintaining quality"""
+    # Import PIL at function level to reduce initial memory footprint
+    from PIL import Image
+    from io import BytesIO
+    
     try:
         img = Image.open(image_file)
         
@@ -230,7 +236,6 @@ def optimize_image(image_file, max_width=1920, max_height=1920, quality=85):
             img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
         
         # Save optimized image
-        from io import BytesIO
         output = BytesIO()
         
         # Determine format

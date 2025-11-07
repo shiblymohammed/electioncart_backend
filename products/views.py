@@ -20,10 +20,7 @@ class PackageViewSet(viewsets.ReadOnlyModelViewSet):
     ViewSet for viewing packages.
     Provides list and detail endpoints.
     """
-    queryset = Package.objects.filter(is_active=True).prefetch_related(
-        'items',
-        Prefetch('productimage_set', queryset=ProductImage.objects.order_by('order'))
-    )
+    queryset = Package.objects.filter(is_active=True).prefetch_related('items')
     serializer_class = PackageSerializer
     permission_classes = [AllowAny]
     
@@ -39,10 +36,7 @@ class PackageViewSet(viewsets.ReadOnlyModelViewSet):
         popular_packages = Package.objects.filter(
             is_active=True,
             is_popular=True
-        ).prefetch_related(
-            'items',
-            Prefetch('productimage_set', queryset=ProductImage.objects.order_by('order'))
-        ).order_by('popular_order', '-created_at')[:3]
+        ).prefetch_related('items').order_by('popular_order', '-created_at')[:3]
         
         serializer = self.get_serializer(popular_packages, many=True)
         return Response(serializer.data)
@@ -53,9 +47,7 @@ class CampaignViewSet(viewsets.ReadOnlyModelViewSet):
     ViewSet for viewing campaigns.
     Provides list and detail endpoints.
     """
-    queryset = Campaign.objects.filter(is_active=True).prefetch_related(
-        Prefetch('productimage_set', queryset=ProductImage.objects.order_by('order'))
-    )
+    queryset = Campaign.objects.filter(is_active=True)
     serializer_class = CampaignSerializer
     permission_classes = [AllowAny]
     
@@ -71,8 +63,6 @@ class CampaignViewSet(viewsets.ReadOnlyModelViewSet):
         popular_campaigns = Campaign.objects.filter(
             is_active=True,
             is_popular=True
-        ).prefetch_related(
-            Prefetch('productimage_set', queryset=ProductImage.objects.order_by('order'))
         ).order_by('popular_order', '-created_at')[:3]
         
         serializer = self.get_serializer(popular_campaigns, many=True)

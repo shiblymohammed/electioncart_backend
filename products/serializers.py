@@ -26,30 +26,42 @@ class PackageSerializer(serializers.ModelSerializer):
     
     def get_images(self, obj):
         """Get all images for the package, ordered with primary first"""
-        from django.contrib.contenttypes.models import ContentType
-        content_type = ContentType.objects.get_for_model(Package)
-        images = ProductImage.objects.filter(
-            content_type=content_type,
-            object_id=obj.id
-        ).order_by('-is_primary', 'order')
-        
-        request = self.context.get('request')
-        return ProductImageSerializer(images, many=True, context={'request': request}).data
+        try:
+            from django.contrib.contenttypes.models import ContentType
+            content_type = ContentType.objects.get_for_model(Package)
+            images = ProductImage.objects.filter(
+                content_type=content_type,
+                object_id=obj.id
+            ).order_by('-is_primary', 'order')
+            
+            request = self.context.get('request')
+            return ProductImageSerializer(images, many=True, context={'request': request}).data
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error fetching images for package {obj.id}: {str(e)}")
+            return []
     
     def get_primary_image(self, obj):
         """Get the primary image for the package"""
-        from django.contrib.contenttypes.models import ContentType
-        content_type = ContentType.objects.get_for_model(Package)
-        primary_image = ProductImage.objects.filter(
-            content_type=content_type,
-            object_id=obj.id,
-            is_primary=True
-        ).first()
-        
-        if primary_image:
-            request = self.context.get('request')
-            return ProductImageSerializer(primary_image, context={'request': request}).data
-        return None
+        try:
+            from django.contrib.contenttypes.models import ContentType
+            content_type = ContentType.objects.get_for_model(Package)
+            primary_image = ProductImage.objects.filter(
+                content_type=content_type,
+                object_id=obj.id,
+                is_primary=True
+            ).first()
+            
+            if primary_image:
+                request = self.context.get('request')
+                return ProductImageSerializer(primary_image, context={'request': request}).data
+            return None
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error fetching primary image for package {obj.id}: {str(e)}")
+            return None
 
 
 class PackageWriteSerializer(serializers.ModelSerializer):
@@ -124,30 +136,42 @@ class CampaignSerializer(serializers.ModelSerializer):
     
     def get_images(self, obj):
         """Get all images for the campaign, ordered with primary first"""
-        from django.contrib.contenttypes.models import ContentType
-        content_type = ContentType.objects.get_for_model(Campaign)
-        images = ProductImage.objects.filter(
-            content_type=content_type,
-            object_id=obj.id
-        ).order_by('-is_primary', 'order')
-        
-        request = self.context.get('request')
-        return ProductImageSerializer(images, many=True, context={'request': request}).data
+        try:
+            from django.contrib.contenttypes.models import ContentType
+            content_type = ContentType.objects.get_for_model(Campaign)
+            images = ProductImage.objects.filter(
+                content_type=content_type,
+                object_id=obj.id
+            ).order_by('-is_primary', 'order')
+            
+            request = self.context.get('request')
+            return ProductImageSerializer(images, many=True, context={'request': request}).data
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error fetching images for campaign {obj.id}: {str(e)}")
+            return []
     
     def get_primary_image(self, obj):
         """Get the primary image for the campaign"""
-        from django.contrib.contenttypes.models import ContentType
-        content_type = ContentType.objects.get_for_model(Campaign)
-        primary_image = ProductImage.objects.filter(
-            content_type=content_type,
-            object_id=obj.id,
-            is_primary=True
-        ).first()
-        
-        if primary_image:
-            request = self.context.get('request')
-            return ProductImageSerializer(primary_image, context={'request': request}).data
-        return None
+        try:
+            from django.contrib.contenttypes.models import ContentType
+            content_type = ContentType.objects.get_for_model(Campaign)
+            primary_image = ProductImage.objects.filter(
+                content_type=content_type,
+                object_id=obj.id,
+                is_primary=True
+            ).first()
+            
+            if primary_image:
+                request = self.context.get('request')
+                return ProductImageSerializer(primary_image, context={'request': request}).data
+            return None
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error fetching primary image for campaign {obj.id}: {str(e)}")
+            return None
 
 
 class CampaignWriteSerializer(serializers.ModelSerializer):
@@ -265,13 +289,20 @@ class ProductImageSerializer(serializers.ModelSerializer):
         
         if settings.USE_CLOUDINARY and obj.image:
             # Use Cloudinary transformation for thumbnail
-            from .cloudinary_utils import CloudinaryHelper
             try:
+                from .cloudinary_utils import CloudinaryHelper
                 # Extract public_id from image URL
                 public_id = obj.image.name
                 return CloudinaryHelper.get_thumbnail_url(public_id, size=300)
-            except:
-                return obj.image.url
+            except Exception as e:
+                # Log the error and fall back to original image URL
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to generate Cloudinary thumbnail: {str(e)}")
+                # Return original image URL as fallback
+                if obj.image:
+                    return obj.image.url
+                return None
         elif obj.thumbnail:
             # Local storage - use generated thumbnail
             request = self.context.get('request')

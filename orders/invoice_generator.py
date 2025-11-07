@@ -1,12 +1,6 @@
 """
 Invoice generation service using ReportLab
 """
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from io import BytesIO
 from datetime import datetime
 from django.conf import settings
@@ -17,11 +11,18 @@ class InvoiceGenerator:
     """Generate PDF invoices for orders"""
     
     def __init__(self):
-        self.styles = getSampleStyleSheet()
-        self._setup_custom_styles()
+        # Styles will be initialized when needed
+        self.styles = None
     
     def _setup_custom_styles(self):
         """Setup custom paragraph styles"""
+        # Import reportlab at function level to reduce initial memory footprint
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+        
+        self.styles = getSampleStyleSheet()
+        
         # Company name style
         self.styles.add(ParagraphStyle(
             name='CompanyName',
@@ -76,6 +77,15 @@ class InvoiceGenerator:
         Returns:
             BytesIO buffer containing the PDF
         """
+        # Import reportlab at function level to reduce initial memory footprint
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Spacer
+        
+        # Initialize styles if not already done
+        if self.styles is None:
+            self._setup_custom_styles()
+        
         buffer = BytesIO()
         
         # Create PDF document
@@ -123,6 +133,10 @@ class InvoiceGenerator:
     
     def _build_invoice_details(self, order):
         """Build invoice details section"""
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
+        from reportlab.platypus import Table, TableStyle, Paragraph
+        
         elements = []
         
         # Invoice title
@@ -156,6 +170,8 @@ class InvoiceGenerator:
     
     def _build_customer_info(self, order):
         """Build customer information section"""
+        from reportlab.platypus import Paragraph
+        
         elements = []
         
         # Section header
@@ -176,6 +192,8 @@ class InvoiceGenerator:
     
     def _build_header(self):
         """Build company header section"""
+        from reportlab.platypus import Paragraph
+        
         elements = []
         
         # Company name
@@ -191,61 +209,14 @@ class InvoiceGenerator:
         
         return elements
     
-    def _build_invoice_details(self, order):
-        """Build invoice details section"""
-        elements = []
-        
-        # Invoice title
-        title = Paragraph("INVOICE", self.styles['InvoiceTitle'])
-        elements.append(title)
-        
-        # Get payment history
-        payment_history = getattr(order, 'payment_history', None)
-        
-        # Invoice details table
-        invoice_data = [
-            ['Invoice Number:', payment_history.invoice_number if payment_history else 'N/A'],
-            ['Order Number:', order.order_number],
-            ['Invoice Date:', payment_history.payment_date.strftime('%B %d, %Y') if payment_history else datetime.now().strftime('%B %d, %Y')],
-            ['Order Date:', order.created_at.strftime('%B %d, %Y')],
-        ]
-        
-        invoice_table = Table(invoice_data, colWidths=[2*inch, 3*inch])
-        invoice_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#374151')),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ]))
-        
-        elements.append(invoice_table)
-        
-        return elements
-    
-    def _build_customer_info(self, order):
-        """Build customer information section"""
-        elements = []
-        
-        # Section header
-        header = Paragraph("Bill To:", self.styles['SectionHeader'])
-        elements.append(header)
-        
-        # Customer details
-        customer_info = f"""
-        <b>{order.user.get_full_name() or order.user.email}</b><br/>
-        Email: {order.user.email}<br/>
-        Phone: {getattr(order.user, 'phone_number', 'N/A')}
-        """
-        
-        customer_para = Paragraph(customer_info, self.styles['Normal'])
-        elements.append(customer_para)
-        
-        return elements
+
     
     def _build_items_table(self, order):
         """Build order items table"""
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
+        from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
+        
         elements = []
         
         # Section header
@@ -321,6 +292,8 @@ class InvoiceGenerator:
     
     def _build_payment_info(self, order):
         """Build payment information section"""
+        from reportlab.platypus import Paragraph
+        
         elements = []
         
         # Section header
@@ -351,6 +324,12 @@ class InvoiceGenerator:
     
     def _build_footer(self):
         """Build invoice footer"""
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER
+        from reportlab.platypus import Paragraph, Spacer
+        
         elements = []
         
         # Thank you message
